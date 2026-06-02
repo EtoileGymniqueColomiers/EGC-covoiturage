@@ -47,19 +47,19 @@ export default function UsersScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false)
 
   // Création licencié
-  const [licenseNumber, setLicenseNumber] = useState('')
-  const [firstName, setFirstName]         = useState('')
-  const [lastName, setLastName]           = useState('')
-  const [birthdate, setBirthdate]         = useState('')
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
-  const [createErrors, setCreateErrors]   = useState<Record<string, string>>({})
+  const [licenseNumber, setLicenseNumber]   = useState('')
+  const [firstName, setFirstName]           = useState('')
+  const [lastName, setLastName]             = useState('')
+  const [birthdate, setBirthdate]           = useState('')
+  const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
+  const [createErrors, setCreateErrors]     = useState<Record<string, string>>({})
 
   const { data: users, isLoading, refetch } = useQuery({
     queryKey: ['admin_users', search],
     queryFn: async () => {
       let query = supabase
         .from('users')
-        .select('*, group:groups(name)')
+        .select('*, user_groups(group_id, groups(id, name))')
         .order('created_at', { ascending: false })
 
       if (search.trim()) {
@@ -149,16 +149,23 @@ export default function UsersScreen() {
       if (authError) throw authError
 
       // Créer le profil
-      await supabase.from('users').insert({
-        auth_id:        authData.user.id,
-        role:           'licencie',
-        license_number: licenseNumber.trim(),
+      const { data: newUser, error: insertError } = await supabase.from('users').insert({
+        auth_id:          authData.user.id,
+        role:             'licencie',
+        license_number:   licenseNumber.trim(),
         email,
-        first_name:     firstName.trim() || null,
-        last_name:      lastName.trim() || null,
-        group_id:       selectedGroupId,
+        first_name:       firstName.trim() || null,
+        last_name:        lastName.trim() || null,
         profile_complete: !!(firstName.trim() && lastName.trim()),
-      })
+      }).select('id').single()
+      if (insertError || !newUser) throw insertError
+
+      // Associer aux groupes sélectionnés
+      if (selectedGroupIds.length > 0) {
+        await supabase.from('user_groups').insert(
+          selectedGroupIds.map(gid => ({ user_id: newUser.id, group_id: gid }))
+        )
+      }
 
       await supabase.from('admin_audit_log').insert({
         admin_id: adminProfile?.id,
@@ -180,7 +187,7 @@ export default function UsersScreen() {
 
   function resetCreateForm() {
     setLicenseNumber(''); setFirstName(''); setLastName('')
-    setBirthdate(''); setSelectedGroupId(null); setCreateErrors({})
+    setBirthdate(''); setSelectedGroupIds([]); setCreateErrors({})
   }
 
   function validateCreate(): boolean {
@@ -290,8 +297,13 @@ export default function UsersScreen() {
               {item.license_number && (
                 <Text style={styles.userDetail}>Licence : {item.license_number}</Text>
               )}
-              {item.group?.name && (
-                <Text style={styles.userDetail}>{item.group.name}</Text>
+              {(item.user_groups ?? []).length > 0 && (
+                <Text style={styles.userDetail}>
+                  {(item.user_groups ?? [])
+                    .map((ug: any) => ug.groups?.name)
+                    .filter(Boolean)
+                    .join(', ')}
+                </Text>
               )}
               {!item.is_active && (
                 <Text style={styles.suspendedLabel}>⛔ Suspendu</Text>
@@ -349,27 +361,30 @@ export default function UsersScreen() {
             </View>
 
             <View>
-              <Text style={styles.fieldLabel}>Groupe d'entraînement</Text>
+              <Text style={styles.fieldLabel}>Groupes d'entraînement</Text>
+              <Text style={styles.fieldHint}>Plusieurs groupes possibles</Text>
               <View style={styles.groupsList}>
-                <TouchableOpacity
-                  style={[styles.groupChip, !selectedGroupId && styles.groupChipActive]}
-                  onPress={() => setSelectedGroupId(null)}
-                >
-                  <Text style={[styles.groupChipText, !selectedGroupId && styles.groupChipTextActive]}>
-                    Aucun
-                  </Text>
-                </TouchableOpacity>
-                {groups?.map((g) => (
-                  <TouchableOpacity
-                    key={g.id}
-                    style={[styles.groupChip, selectedGroupId === g.id && styles.groupChipActive]}
-                    onPress={() => setSelectedGroupId(g.id)}
-                  >
-                    <Text style={[styles.groupChipText, selectedGroupId === g.id && styles.groupChipTextActive]}>
-                      {g.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {groups?.map((g) => {
+                  const active = selectedGroupIds.includes(g.id)
+                  return (
+                    <TouchableOpacity
+                      key={g.id}
+                      style={[styles.groupChip, active && styles.groupChipActive]}
+                      onPress={() =>
+                        setSelectedGroupIds(prev =>
+                          active ? prev.filter(id => id !== g.id) : [...prev, g.id]
+                        )
+                      }
+                    >
+                      {active && (
+                        <Ionicons name="checkmark" size={12} color={COLORS.textInverse} style={{ marginRight: 4 }} />
+                      )}
+                      <Text style={[styles.groupChipText, active && styles.groupChipTextActive]}>
+                        {g.name}
+                      </Text>
+                    </TouchableOpacity>
+                  )
+                })}
               </View>
             </View>
 
@@ -417,7 +432,8 @@ const styles = StyleSheet.create({
   modalContent: { padding: SPACING.md, gap: SPACING.md },
   nameRow: { flexDirection: 'row', gap: SPACING.sm },
   halfInput: { flex: 1 },
-  fieldLabel: { fontSize: 14, fontWeight: '500', color: COLORS.text, marginBottom: SPACING.sm },
+  fieldLabel: { fontSize: 14, fontWeight: '500', color: COLORS.text, marginBottom: 2 },
+  fieldHint:  { fontSize: 12, color: COLORS.textMuted, marginBottom: SPACING.sm },
   groupsList: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm },
   groupChip: { paddingHorizontal: SPACING.md, paddingVertical: 8, borderRadius: RADIUS.full, backgroundColor: COLORS.surface, borderWidth: 1, borderColor: COLORS.border },
   groupChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },

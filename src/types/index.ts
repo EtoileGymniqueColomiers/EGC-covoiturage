@@ -39,13 +39,13 @@ export interface UserProfile {
   address: string | null
   lat: number | null
   lng: number | null
-  group_id: string | null
   car_capacity: number
   is_active: boolean
   profile_complete: boolean
   push_token: string | null
   created_at: string
-  group?: Group
+  // Groupes via table de jointure user_groups (chargés en option selon la requête)
+  user_groups?: { group_id: string; groups: { id: string; name: string } | null }[]
 }
 
 export interface Trip {

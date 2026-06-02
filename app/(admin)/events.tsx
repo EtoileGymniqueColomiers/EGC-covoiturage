@@ -20,7 +20,6 @@ import { supabase } from '@/lib/supabase'
 import { DatePickerInput } from '@/components/ui/DatePickerInput'
 import { useAuthStore } from '@/stores/auth.store'
 import { Input } from '@/components/ui/Input'
-import { AddressInput } from '@/components/ui/AddressInput'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { COLORS, SPACING, RADIUS } from '@/constants/theme'
@@ -78,7 +77,9 @@ export default function EventsScreen() {
         endDateFormatted = `${ey}-${em}-${ed}`
       }
 
-      const { error } = await supabase.from('events').insert({
+      // group_ids n'est inclus que si des groupes sont sélectionnés
+      // (évite l'erreur si la migration 005 n'a pas encore été appliquée)
+      const payload: Record<string, unknown> = {
         name:               name.trim(),
         event_date:         dateFormatted,
         end_date:           endDateFormatted,
@@ -86,10 +87,13 @@ export default function EventsScreen() {
         location:           location.trim(),
         description:        description.trim() || null,
         accommodation_note: isMultiDay ? (accommodationNote.trim() || null) : null,
-        group_ids:          selectedGroupIds,
         created_by:         profile?.id,
-      })
+      }
+      if (selectedGroupIds.length > 0) {
+        payload.group_ids = selectedGroupIds
+      }
 
+      const { error } = await supabase.from('events').insert(payload)
       if (error) throw error
 
       await supabase.from('admin_audit_log').insert({
@@ -104,7 +108,10 @@ export default function EventsScreen() {
       setShowModal(false)
       resetForm()
     },
-    onError: () => Alert.alert('Erreur', 'Impossible de créer l\'événement.'),
+    onError: (err: Error) => {
+      console.error('[events] create error:', err)
+      Alert.alert('Impossible de créer l\'événement', err.message || 'Vérifiez votre connexion et réessayez.')
+    },
   })
 
   const deleteEvent = useMutation({
@@ -224,7 +231,7 @@ export default function EventsScreen() {
           <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
             <Input label="Nom de l'événement *" placeholder="Championnat Régional" value={name} onChangeText={setName} error={formErrors.name} icon="trophy-outline" />
             <DatePickerInput label="Date *" value={eventDate} onChange={setEventDate} error={formErrors.eventDate} minimumDate={new Date()} />
-            <AddressInput label="Lieu *" placeholder="Gymnase de Lyon, 12 rue du Sport" value={location} onSelect={(addr) => setLocation(addr)} error={formErrors.location} />
+            <Input label="Lieu *" placeholder="Gymnase de Lyon, 12 rue du Sport" value={location} onChangeText={(v) => { setLocation(v); setFormErrors(e => ({ ...e, location: '' })) }} error={formErrors.location} icon="location-outline" />
             <Input label="Description (optionnel)" placeholder="Informations complémentaires..." value={description} onChangeText={setDescription} multiline />
 
             {/* Multi-jours */}
