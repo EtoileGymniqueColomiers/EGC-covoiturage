@@ -23,6 +23,7 @@ export interface Event {
   lng: number | null
   description: string | null
   accommodation_note: string | null
+  group_ids: string[]
   created_by: string | null
   created_at: string
 }

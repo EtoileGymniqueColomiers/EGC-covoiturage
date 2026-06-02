@@ -1,4 +1,6 @@
 import React, { useState } from 'react'
+
+const PAGE_SIZE = 5
 import {
   View,
   Text,
@@ -32,6 +34,8 @@ type Member = {
 export default function GroupsScreen() {
   const queryClient = useQueryClient()
 
+  const [limit, setLimit] = useState(PAGE_SIZE)
+
   // Modals
   const [editModal, setEditModal]     = useState<GroupWithCount | 'new' | null>(null)
   const [membersModal, setMembersModal] = useState<GroupWithCount | null>(null)
@@ -43,20 +47,26 @@ export default function GroupsScreen() {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
 
   // ── Groupes avec nombre de membres ──────────────────────────────────────
-  const { data: groups, isLoading, refetch } = useQuery({
-    queryKey: ['admin_groups'],
+  const { data: queryResult, isLoading, refetch } = useQuery({
+    queryKey: ['admin_groups', limit],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error, count } = await supabase
         .from('groups')
-        .select('*, user_groups(user_id)')
+        .select('*, user_groups(user_id)', { count: 'exact' })
         .order('name')
+        .limit(limit)
       if (error) throw error
-      return (data ?? []).map(g => ({
+      const groups = (data ?? []).map(g => ({
         ...g,
         member_count: Array.isArray(g.user_groups) ? g.user_groups.length : 0,
       })) as GroupWithCount[]
+      return { groups, total: count ?? 0 }
     },
   })
+
+  const groups      = queryResult?.groups ?? []
+  const totalGroups = queryResult?.total ?? 0
+  const hasMore     = groups.length < totalGroups
 
   // ── Membres du groupe sélectionné ───────────────────────────────────────
   const { data: members } = useQuery({
@@ -239,7 +249,7 @@ export default function GroupsScreen() {
       </View>
 
       <FlatList
-        data={groups ?? []}
+        data={groups}
         keyExtractor={g => g.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -247,6 +257,21 @@ export default function GroupsScreen() {
           <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={COLORS.primary} />
         }
         ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
+        ListFooterComponent={() =>
+          groups.length > 0 ? (
+            <View style={styles.footer}>
+              <Text style={styles.footerCount}>{groups.length} / {totalGroups} groupe{totalGroups !== 1 ? 's' : ''}</Text>
+              {hasMore && (
+                <Button
+                  label={`Charger plus (${totalGroups - groups.length} restants)`}
+                  onPress={() => setLimit(prev => prev + PAGE_SIZE)}
+                  variant="outline"
+                  size="sm"
+                />
+              )}
+            </View>
+          ) : null
+        }
         ListEmptyComponent={
           !isLoading ? (
             <View style={styles.empty}>
@@ -476,6 +501,8 @@ const styles = StyleSheet.create({
   cardCount:   { fontSize: 12, color: COLORS.textMuted },
   cardActions: { flexDirection: 'row', gap: 4 },
   actionBtn:   { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  footer:      { paddingVertical: SPACING.lg, alignItems: 'center', gap: SPACING.sm },
+  footerCount: { fontSize: 12, color: COLORS.textMuted },
 
   empty:      { alignItems: 'center', paddingTop: SPACING.xl * 2, gap: SPACING.md },
   emptyTitle: { fontSize: 16, fontWeight: '700', color: COLORS.text },

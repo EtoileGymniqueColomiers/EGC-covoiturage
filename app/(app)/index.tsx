@@ -10,12 +10,15 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { Ionicons } from '@expo/vector-icons'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthStore } from '@/stores/auth.store'
 import { useTrips } from '@/hooks/useTrips'
 import { TripCard } from '@/components/TripCard'
 import { Button } from '@/components/ui/Button'
 import { COLORS, SPACING, RADIUS, SHADOW } from '@/constants/theme'
-import { format, isToday, isTomorrow } from 'date-fns'
+import { supabase } from '@/lib/supabase'
+import { Event } from '@/types'
+import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 
 export default function HomeScreen() {
@@ -27,6 +30,38 @@ export default function HomeScreen() {
   })
 
   const upcomingTrips = (trips ?? []).slice(0, 3)
+
+  const { data: upcomingEvents = [] } = useQuery({
+    queryKey: ['home_events', profile?.id],
+    queryFn: async () => {
+      if (!profile) return []
+      const today = new Date().toISOString().split('T')[0]
+
+      // Groupes du licencié
+      const { data: userGroups } = await supabase
+        .from('user_groups')
+        .select('group_id')
+        .eq('user_id', profile.id)
+
+      const myGroupIds = new Set((userGroups ?? []).map((ug: any) => ug.group_id as string))
+
+      const { data } = await supabase
+        .from('events')
+        .select('*')
+        .gte('event_date', today)
+        .order('event_date', { ascending: true })
+        .limit(10)
+
+      return ((data ?? []) as Event[])
+        .filter(e =>
+          !e.group_ids?.length ||
+          e.group_ids.some(gid => myGroupIds.has(gid))
+        )
+        .slice(0, 3)
+    },
+    enabled: !!profile,
+    staleTime: 1000 * 60 * 5,
+  })
 
   function formatGreeting() {
     const hour = new Date().getHours()
@@ -135,6 +170,54 @@ export default function HomeScreen() {
           )}
         </View>
 
+        {/* Événements à venir */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Événements à venir</Text>
+          </View>
+
+          {upcomingEvents.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Ionicons name="trophy-outline" size={32} color={COLORS.textMuted} />
+              <Text style={styles.emptyText}>Aucun événement prévu pour ton groupe</Text>
+            </View>
+          ) : (
+            <View style={styles.eventsList}>
+              {upcomingEvents.map(event => {
+                const dateStr = format(new Date(event.event_date), 'd MMM yyyy', { locale: fr })
+                const endStr  = event.is_multi_day && event.end_date
+                  ? ` → ${format(new Date(event.end_date), 'd MMM', { locale: fr })}`
+                  : ''
+                return (
+                  <View key={event.id} style={styles.eventCard}>
+                    <View style={styles.eventDateBadge}>
+                      <Text style={styles.eventDay}>
+                        {format(new Date(event.event_date), 'd', { locale: fr })}
+                      </Text>
+                      <Text style={styles.eventMonth}>
+                        {format(new Date(event.event_date), 'MMM', { locale: fr })}
+                      </Text>
+                    </View>
+                    <View style={styles.eventInfo}>
+                      <Text style={styles.eventName} numberOfLines={1}>{event.name}</Text>
+                      <View style={styles.eventMeta}>
+                        <Ionicons name="location-outline" size={12} color={COLORS.textMuted} />
+                        <Text style={styles.eventLocation} numberOfLines={1}>{event.location}</Text>
+                      </View>
+                      <Text style={styles.eventDate}>{dateStr}{endStr}</Text>
+                    </View>
+                    {event.is_multi_day && (
+                      <View style={styles.multiDayBadge}>
+                        <Text style={styles.multiDayText}>Multi-jours</Text>
+                      </View>
+                    )}
+                  </View>
+                )
+              })}
+            </View>
+          )}
+        </View>
+
         {/* Rappel sécurité */}
         <View style={styles.safetyBanner}>
           <Ionicons name="shield-checkmark-outline" size={20} color={COLORS.primary} />
@@ -209,6 +292,41 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   emptyText: { fontSize: 14, color: COLORS.textMuted, textAlign: 'center' },
+
+  eventsList: { gap: SPACING.sm },
+  eventCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    ...SHADOW.sm,
+  },
+  eventDateBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  eventDay:   { fontSize: 16, fontWeight: '800', color: COLORS.primary, lineHeight: 18 },
+  eventMonth: { fontSize: 10, fontWeight: '600', color: COLORS.primary, textTransform: 'uppercase' },
+  eventInfo:  { flex: 1, gap: 2 },
+  eventName:  { fontSize: 14, fontWeight: '700', color: COLORS.text },
+  eventMeta:  { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  eventLocation: { fontSize: 12, color: COLORS.textMuted, flex: 1 },
+  eventDate:  { fontSize: 11, color: COLORS.textSecondary },
+  multiDayBadge: {
+    backgroundColor: COLORS.infoLight,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 3,
+    borderRadius: RADIUS.full,
+  },
+  multiDayText: { fontSize: 10, fontWeight: '600', color: COLORS.info },
 
   safetyBanner: {
     flexDirection: 'row',

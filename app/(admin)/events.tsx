@@ -105,6 +105,7 @@ export default function EventsScreen() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['events'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_audit'] })
       setShowModal(false)
       resetForm()
     },

@@ -4,11 +4,38 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useQuery } from '@tanstack/react-query'
 import { useRouter } from 'expo-router'
+import { format } from 'date-fns'
+import { fr } from 'date-fns/locale'
 import { supabase, signOut } from '@/lib/supabase'
 import { useAuthStore } from '@/stores/auth.store'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { COLORS, SPACING, RADIUS } from '@/constants/theme'
+
+type ActionConfig = { label: string; icon: string; color: string }
+
+const ACTION_CONFIG: Record<string, ActionConfig> = {
+  create_licencie:      { label: "Création d'un compte licencié",   icon: 'person-add',          color: COLORS.success },
+  delete_licencie:      { label: "Suppression d'un compte licencié",  icon: 'trash',  color: COLORS.error },
+  delete_parent:        { label: "Suppression d'un compte parent",    icon: 'trash',  color: COLORS.error },
+  delete_encadrant:     { label: "Suppression d'un compte encadrant", icon: 'trash',  color: COLORS.error },
+  approve_registration: { label: "Validation d'une inscription",    icon: 'checkmark-circle',    color: COLORS.success },
+  suspend_user:         { label: "Suspension d'un compte",          icon: 'ban',                 color: COLORS.error   },
+  reactivate_user:      { label: "Réactivation d'un compte",        icon: 'checkmark-done-circle', color: COLORS.info  },
+  create_event:         { label: "Création d'un événement",         icon: 'trophy',              color: COLORS.secondary },
+  delete_event:         { label: "Suppression d'un événement",      icon: 'trash',               color: COLORS.error   },
+  create_group:         { label: "Création d'un groupe",            icon: 'people',              color: COLORS.info    },
+  update_group:         { label: "Modification d'un groupe",        icon: 'create',              color: COLORS.info    },
+  delete_group:         { label: "Suppression d'un groupe",         icon: 'trash',               color: COLORS.error   },
+}
+
+function getActionConfig(action: string): ActionConfig {
+  return ACTION_CONFIG[action] ?? {
+    label: action.replace(/_/g, ' '),
+    icon:  'ellipse',
+    color: COLORS.textMuted,
+  }
+}
 
 export default function AdminDashboard() {
   const router = useRouter()
@@ -112,17 +139,26 @@ export default function AdminDashboard() {
           {recentAudit?.length === 0 && (
             <Text style={styles.emptyText}>Aucune action enregistrée</Text>
           )}
-          {recentAudit?.map((log) => (
-            <View key={log.id} style={styles.auditRow}>
-              <View style={styles.auditDot} />
-              <View style={styles.auditContent}>
-                <Text style={styles.auditAction}>{log.action}</Text>
-                <Text style={styles.auditAdmin}>
-                  par {log.admin?.first_name} {log.admin?.last_name}
-                </Text>
+          {recentAudit?.map((log) => {
+            const cfg = getActionConfig(log.action)
+            const adminName = log.admin
+              ? `${log.admin.first_name ?? ''} ${log.admin.last_name ?? ''}`.trim()
+              : 'Admin inconnu'
+            const date = format(new Date(log.created_at), "d MMM à HH'h'mm", { locale: fr })
+            return (
+              <View key={log.id} style={styles.auditRow}>
+                <View style={[styles.auditIconWrap, { backgroundColor: cfg.color + '20' }]}>
+                  <Ionicons name={cfg.icon as never} size={16} color={cfg.color} />
+                </View>
+                <View style={styles.auditContent}>
+                  <Text style={styles.auditAction}>{cfg.label}</Text>
+                  <Text style={styles.auditMeta}>
+                    par {adminName} · {date}
+                  </Text>
+                </View>
               </View>
-            </View>
-          ))}
+            )
+          })}
         </Card>
       </ScrollView>
     </SafeAreaView>
@@ -168,9 +204,9 @@ const styles = StyleSheet.create({
   section: { gap: SPACING.sm },
   sectionTitle: { fontSize: 15, fontWeight: '700', color: COLORS.text, marginBottom: SPACING.xs },
   emptyText: { fontSize: 14, color: COLORS.textMuted },
-  auditRow: { flexDirection: 'row', gap: SPACING.sm, paddingVertical: SPACING.xs },
-  auditDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.primary, marginTop: 6 },
+  auditRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, paddingVertical: SPACING.xs },
+  auditIconWrap: { width: 32, height: 32, borderRadius: RADIUS.sm, alignItems: 'center', justifyContent: 'center' },
   auditContent: { flex: 1 },
-  auditAction: { fontSize: 13, color: COLORS.text, fontWeight: '500' },
-  auditAdmin: { fontSize: 11, color: COLORS.textMuted },
+  auditAction: { fontSize: 13, color: COLORS.text, fontWeight: '600' },
+  auditMeta: { fontSize: 11, color: COLORS.textMuted, marginTop: 1 },
 })

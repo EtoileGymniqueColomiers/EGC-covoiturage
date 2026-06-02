@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   View,
   Text,
@@ -25,6 +25,8 @@ import { Card } from '@/components/ui/Card'
 import { COLORS, SPACING, RADIUS } from '@/constants/theme'
 import { UserProfile, UserRole } from '@/types'
 
+const PAGE_SIZE = 15
+
 const ROLE_LABELS: Record<UserRole, string> = {
   licencie:  'Licencié',
   parent:    'Parent',
@@ -44,7 +46,10 @@ export default function UsersScreen() {
   const queryClient = useQueryClient()
 
   const [search, setSearch]           = useState('')
+  const [limit, setLimit]             = useState(PAGE_SIZE)
   const [showCreateModal, setShowCreateModal] = useState(false)
+
+  useEffect(() => { setLimit(PAGE_SIZE) }, [search])
 
   // Création licencié
   const [licenseNumber, setLicenseNumber]   = useState('')
@@ -54,13 +59,15 @@ export default function UsersScreen() {
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
   const [createErrors, setCreateErrors]     = useState<Record<string, string>>({})
 
-  const { data: users, isLoading, refetch } = useQuery({
-    queryKey: ['admin_users', search],
+  const { data: queryResult, isLoading, refetch } = useQuery({
+    queryKey: ['admin_users', search, limit],
     queryFn: async () => {
       let query = supabase
         .from('users')
-        .select('*, user_groups(group_id, groups(id, name))')
+        .select('*, user_groups(group_id, groups(id, name))', { count: 'exact' })
+        .neq('role', 'admin')
         .order('created_at', { ascending: false })
+        .limit(limit)
 
       if (search.trim()) {
         query = query.or(
@@ -68,10 +75,14 @@ export default function UsersScreen() {
         )
       }
 
-      const { data } = await query
-      return (data ?? []) as UserProfile[]
+      const { data, count } = await query
+      return { users: (data ?? []) as UserProfile[], total: count ?? 0 }
     },
   })
+
+  const users      = queryResult?.users ?? []
+  const totalUsers = queryResult?.total ?? 0
+  const hasMore    = users.length < totalUsers
 
   const pendingUsers = (users ?? []).filter(u => !u.is_active && u.role !== 'licencie')
 
@@ -85,7 +96,11 @@ export default function UsersScreen() {
         target_id: userId,
       })
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin_users'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_audit'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_stats'] })
+    },
   })
 
   const { data: groups } = useQuery({
@@ -112,7 +127,10 @@ export default function UsersScreen() {
         reason,
       })
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin_users'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_audit'] })
+    },
   })
 
   const reactivateUser = useMutation({
@@ -130,7 +148,23 @@ export default function UsersScreen() {
         target_id: userId,
       })
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin_users'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_audit'] })
+    },
+  })
+
+  const deleteMember = useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase.rpc('admin_delete_member', { p_user_id: userId })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin_users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_audit'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_stats'] })
+    },
+    onError: (err: Error) => Alert.alert('Erreur', err.message),
   })
 
   const createLicencie = useMutation({
@@ -138,44 +172,20 @@ export default function UsersScreen() {
       const [d, m, y] = birthdate.split('/')
       const birthdateFmt = `${y}-${m}-${d}`
 
-      // Créer le compte Supabase Auth
-      const email = `${licenseNumber.toLowerCase().trim()}@egc.internal`
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email,
-        password: birthdateFmt,
-        email_confirm: true,
-        user_metadata: { role: 'licencie', license_number: licenseNumber },
+      const { error } = await supabase.rpc('admin_create_licencie', {
+        p_license_number: licenseNumber.trim(),
+        p_birthdate:      birthdateFmt,
+        p_first_name:     firstName.trim(),
+        p_last_name:      lastName.trim(),
+        p_group_ids:      selectedGroupIds.length > 0 ? selectedGroupIds : null,
       })
-      if (authError) throw authError
 
-      // Créer le profil
-      const { data: newUser, error: insertError } = await supabase.from('users').insert({
-        auth_id:          authData.user.id,
-        role:             'licencie',
-        license_number:   licenseNumber.trim(),
-        email,
-        first_name:       firstName.trim() || null,
-        last_name:        lastName.trim() || null,
-        profile_complete: !!(firstName.trim() && lastName.trim()),
-      }).select('id').single()
-      if (insertError || !newUser) throw insertError
-
-      // Associer aux groupes sélectionnés
-      if (selectedGroupIds.length > 0) {
-        await supabase.from('user_groups').insert(
-          selectedGroupIds.map(gid => ({ user_id: newUser.id, group_id: gid }))
-        )
-      }
-
-      await supabase.from('admin_audit_log').insert({
-        admin_id: adminProfile?.id,
-        action: 'create_licencie',
-        target_type: 'user',
-        reason: `Licence: ${licenseNumber}`,
-      })
+      if (error) throw error
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin_users'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_audit'] })
+      queryClient.invalidateQueries({ queryKey: ['admin_stats'] })
       setShowCreateModal(false)
       resetCreateForm()
       Alert.alert('Compte créé', `Le licencié ${firstName} ${lastName} peut maintenant se connecter.`)
@@ -197,6 +207,35 @@ export default function UsersScreen() {
     else if (!/^\d{2}\/\d{2}\/\d{4}$/.test(birthdate)) e.birthdate = 'Format : JJ/MM/AAAA'
     setCreateErrors(e)
     return Object.keys(e).length === 0
+  }
+
+  function handleDelete(user: UserProfile) {
+    const name = `${user.first_name} ${user.last_name}`
+
+    const details: Record<string, string> = {
+      licencie:
+        `• Tous les trajets créés par ce licencié\n• Toutes ses réservations\n• Ses conversations et messages\n• Son lien avec son compte parent\n\nLe compte parent ne sera pas supprimé.`,
+      parent:
+        `• Tous les trajets créés par ce parent\n• Toutes ses réservations\n• Ses conversations et messages\n• Ses liens avec ses enfants licenciés\n\nLes comptes licenciés ne seront pas supprimés.`,
+      encadrant:
+        `• Tous les trajets créés par cet encadrant\n• Toutes ses réservations\n• Ses conversations et messages`,
+    }
+
+    const roleLabel = ROLE_LABELS[user.role] ?? user.role
+    const detail = details[user.role] ?? ''
+
+    Alert.alert(
+      '⚠️ Suppression définitive',
+      `Vous êtes sur le point de supprimer définitivement le compte ${roleLabel} de ${name}.\n\nCette action supprimera :\n${detail}\n\n⚠️ Cette action est IRRÉVERSIBLE.`,
+      [
+        { text: 'Annuler', style: 'cancel' },
+        {
+          text: 'Supprimer définitivement',
+          style: 'destructive',
+          onPress: () => deleteMember.mutate(user.id),
+        },
+      ]
+    )
   }
 
   function handleSuspend(user: UserProfile) {
@@ -273,7 +312,7 @@ export default function UsersScreen() {
       </View>
 
       <FlatList
-        data={users ?? []}
+        data={users}
         keyExtractor={(u) => u.id}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
@@ -281,6 +320,19 @@ export default function UsersScreen() {
           <RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={COLORS.primary} />
         }
         ItemSeparatorComponent={() => <View style={{ height: SPACING.sm }} />}
+        ListFooterComponent={() => (
+          <View style={styles.footer}>
+            <Text style={styles.footerCount}>{users.length} / {totalUsers} membres</Text>
+            {hasMore && (
+              <Button
+                label={`Charger plus (${totalUsers - users.length} restants)`}
+                onPress={() => setLimit(prev => prev + PAGE_SIZE)}
+                variant="outline"
+                size="sm"
+              />
+            )}
+          </View>
+        )}
         renderItem={({ item }) => (
           <View style={[styles.userCard, !item.is_active && styles.userCardSuspended]}>
             <Avatar firstName={item.first_name} lastName={item.last_name} size={44} />
@@ -309,20 +361,31 @@ export default function UsersScreen() {
                 <Text style={styles.suspendedLabel}>⛔ Suspendu</Text>
               )}
             </View>
-            <TouchableOpacity
-              onPress={() =>
-                item.is_active
-                  ? handleSuspend(item)
-                  : reactivateUser.mutate(item.id)
-              }
-              style={styles.actionBtn}
-            >
-              <Ionicons
-                name={item.is_active ? 'ban-outline' : 'checkmark-circle-outline'}
-                size={22}
-                color={item.is_active ? COLORS.error : COLORS.success}
-              />
-            </TouchableOpacity>
+            <View style={styles.cardActions}>
+              <TouchableOpacity
+                onPress={() =>
+                  item.is_active
+                    ? handleSuspend(item)
+                    : reactivateUser.mutate(item.id)
+                }
+                style={styles.actionBtn}
+              >
+                <Ionicons
+                  name={item.is_active ? 'ban-outline' : 'checkmark-circle-outline'}
+                  size={22}
+                  color={item.is_active ? COLORS.error : COLORS.success}
+                />
+              </TouchableOpacity>
+
+              {item.role !== 'admin' && (
+                <TouchableOpacity
+                  onPress={() => handleDelete(item)}
+                  style={styles.actionBtn}
+                >
+                  <Ionicons name="trash-outline" size={22} color={COLORS.error} />
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         )}
       />
@@ -425,7 +488,10 @@ const styles = StyleSheet.create({
   userName: { fontSize: 14, fontWeight: '600', color: COLORS.text },
   userDetail: { fontSize: 12, color: COLORS.textMuted },
   suspendedLabel: { fontSize: 12, color: COLORS.error, fontWeight: '600' },
+  cardActions: { flexDirection: 'row', alignItems: 'center' },
   actionBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  footer: { paddingVertical: SPACING.lg, alignItems: 'center', gap: SPACING.sm },
+  footerCount: { fontSize: 12, color: COLORS.textMuted },
   modal: { flex: 1, backgroundColor: COLORS.background },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   modalTitle: { fontSize: 18, fontWeight: '700', color: COLORS.text },
