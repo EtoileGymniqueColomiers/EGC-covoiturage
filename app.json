@@ -1,25 +1,26 @@
 {
   "expo": {
-    "name": "EGC Covoiturage",
+    "name": "EGC-covoiturage",
     "slug": "egc-covoiturage",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
-    "scheme": "egc",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#1A56DB"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
+        "jsEngine": "jsc",
       "supportsTablet": false,
       "bundleIdentifier": "fr.egc.covoiturage",
       "buildNumber": "1",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Utilisé pour afficher les trajets proches de vous.",
-        "NSCameraUsageDescription": "Utilisé pour votre photo de profil."
+        "NSCameraUsageDescription": "Utilisé pour votre photo de profil.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -43,21 +44,17 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      [
-        "expo-notifications",
-        {
-          "icon": "./assets/notification-icon.png",
-          "color": "#1A56DB"
-        }
-      ]
+      "expo-notifications"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "eas": {
-        "projectId": "REMPLACER_PAR_VOTRE_PROJECT_ID"
-      }
-    }
+        "projectId": "47aa20a9-9140-4656-9f4b-244990449330"
+      },
+      "router": {}
+    },
+    "owner": "etoilegymniquecolomiersusc"
   }
 }

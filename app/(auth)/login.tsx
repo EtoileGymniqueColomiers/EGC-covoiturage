@@ -14,6 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { Ionicons } from '@expo/vector-icons'
 import { useRouter } from 'expo-router'
 import { signInLicencie, signInWithEmail } from '@/lib/supabase'
+import { useAuthStore } from '@/stores/auth.store'
 import { DatePickerInput } from '@/components/ui/DatePickerInput'
 import { Input } from '@/components/ui/Input'
 import { Button } from '@/components/ui/Button'
@@ -84,14 +85,31 @@ export default function LoginScreen() {
     setLoading(true)
 
     try {
+      let result
       if (mode === 'licencie') {
         const [d, m, y] = birthdate.split('/')
-        const birthdateFormatted = `${y}-${m}-${d}`
-        const { error } = await signInLicencie(licenseNumber.trim(), birthdateFormatted)
-        if (error) setLoginError(classifyError(error.message))
+        result = await signInLicencie(licenseNumber.trim(), `${y}-${m}-${d}`)
       } else {
-        const { error } = await signInWithEmail(email.trim(), password)
-        if (error) setLoginError(classifyError(error.message))
+        result = await signInWithEmail(email.trim(), password)
+      }
+
+      if (result.error) {
+        setLoginError(classifyError(result.error.message))
+        return
+      }
+
+      const userId = result.data?.user?.id
+      if (!userId) return
+
+      await useAuthStore.getState().fetchProfile(userId)
+      const profile = useAuthStore.getState().profile
+
+      if (!profile || !profile.profile_complete) {
+        router.replace('/(auth)/complete-profile')
+      } else if (profile.role === 'admin') {
+        router.replace('/(admin)')
+      } else {
+        router.replace('/(app)')
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : ''

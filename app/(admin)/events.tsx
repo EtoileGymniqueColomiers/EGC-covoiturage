@@ -20,6 +20,7 @@ import { supabase } from '@/lib/supabase'
 import { DatePickerInput } from '@/components/ui/DatePickerInput'
 import { useAuthStore } from '@/stores/auth.store'
 import { Input } from '@/components/ui/Input'
+import { AddressInput } from '@/components/ui/AddressInput'
 import { Button } from '@/components/ui/Button'
 import { Badge } from '@/components/ui/Badge'
 import { COLORS, SPACING, RADIUS } from '@/constants/theme'
@@ -36,6 +37,8 @@ export default function EventsScreen() {
   const [endDate, setEndDate]                 = useState('')
   const [isMultiDay, setIsMultiDay]           = useState(false)
   const [location, setLocation]               = useState('')
+  const [locationLat, setLocationLat]         = useState<number | null>(null)
+  const [locationLng, setLocationLng]         = useState<number | null>(null)
   const [description, setDescription]         = useState('')
   const [accommodationNote, setAccommodationNote] = useState('')
   const [selectedGroupIds, setSelectedGroupIds] = useState<string[]>([])
@@ -85,6 +88,8 @@ export default function EventsScreen() {
         end_date:           endDateFormatted,
         is_multi_day:       isMultiDay,
         location:           location.trim(),
+        lat:                locationLat,
+        lng:                locationLng,
         description:        description.trim() || null,
         accommodation_note: isMultiDay ? (accommodationNote.trim() || null) : null,
         created_by:         profile?.id,
@@ -135,8 +140,8 @@ export default function EventsScreen() {
 
   function resetForm() {
     setName(''); setEventDate(''); setEndDate('')
-    setIsMultiDay(false); setLocation(''); setDescription('')
-    setAccommodationNote(''); setSelectedGroupIds([]); setFormErrors({})
+    setIsMultiDay(false); setLocation(''); setLocationLat(null); setLocationLng(null)
+    setDescription(''); setAccommodationNote(''); setSelectedGroupIds([]); setFormErrors({})
   }
 
   function handleDelete(event: Event) {
@@ -232,7 +237,18 @@ export default function EventsScreen() {
           <ScrollView contentContainerStyle={styles.modalContent} keyboardShouldPersistTaps="handled">
             <Input label="Nom de l'événement *" placeholder="Championnat Régional" value={name} onChangeText={setName} error={formErrors.name} icon="trophy-outline" />
             <DatePickerInput label="Date *" value={eventDate} onChange={setEventDate} error={formErrors.eventDate} minimumDate={new Date()} />
-            <Input label="Lieu *" placeholder="Gymnase de Lyon, 12 rue du Sport" value={location} onChangeText={(v) => { setLocation(v); setFormErrors(e => ({ ...e, location: '' })) }} error={formErrors.location} icon="location-outline" />
+            <AddressInput
+              label="Lieu *"
+              placeholder="Gymnase de Lyon, 12 rue du Sport"
+              value={location}
+              onSelect={(addr, lat, lng) => {
+                setLocation(addr)
+                setLocationLat(lat ?? null)
+                setLocationLng(lng ?? null)
+                setFormErrors(e => ({ ...e, location: '' }))
+              }}
+              error={formErrors.location}
+            />
             <Input label="Description (optionnel)" placeholder="Informations complémentaires..." value={description} onChangeText={setDescription} multiline />
 
             {/* Multi-jours */}

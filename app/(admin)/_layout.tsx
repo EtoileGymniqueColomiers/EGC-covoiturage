@@ -1,9 +1,14 @@
 import { Tabs } from 'expo-router'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons'
 import { COLORS } from '@/constants/theme'
 
+
+const queryClient = new QueryClient();
+
 export default function AdminLayout() {
   return (
+<QueryClientProvider client={queryClient}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -57,5 +62,7 @@ export default function AdminLayout() {
         }}
       />
     </Tabs>
-  )
+</QueryClientProvider> /* 4. Rajoute cette balise fermante ici */
+  );
 }
+
