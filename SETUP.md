@@ -113,26 +113,41 @@ INSERT INTO groups (name, schedule, coach_name) VALUES
 
 ---
 
-## 8. Publier sur les stores (optionnel)
+## 8. Publier iOS sur TestFlight (Fastlane — gratuit)
 
-### Installer EAS CLI
+Prérequis : compte Apple Developer ($99/an), Xcode CLI tools, Ruby/Bundler.
+Pas besoin d’ouvrir Xcode : la signature utilise la clé API App Store Connect (cloud signing).
+
+### Config
 ```bash
-npm install -g eas-cli
-eas login
-eas build:configure
+cd ios
+bundle install
+cp fastlane/.env.example fastlane/.env
+# Éditer fastlane/.env :
+#   FASTLANE_TEAM_ID
+#   APP_STORE_CONNECT_KEY_ID / ISSUER_ID / KEY_PATH
+# Placer AuthKey_*.p8 dans ios/secrets/ (gitignored)
 ```
 
-### Build Android (APK direct, sans Play Store)
+Créer l’app dans [App Store Connect](https://appstoreconnect.apple.com) avec le bundle id `fr.egc.covoiturage` si elle n’existe pas.
+
+La clé API doit être une **Team Key** avec rôle **Admin** ou **App Manager** (les Individual keys ne gèrent pas le provisioning).
+
+### Build + upload TestFlight
 ```bash
-eas build -p android --profile preview
+# depuis la racine du repo
+npm run ios:beta
+
+# ou depuis ios/
+cd ios && bundle exec fastlane beta
 ```
 
-### Build iOS + App Store
-Nécessite un compte Apple Developer ($99/an).
-```bash
-eas build -p ios
-eas submit -p ios
-```
+Lanes utiles :
+- `bundle exec fastlane build` — IPA seulement
+- `bundle exec fastlane upload` — upload d’un IPA déjà généré
+- `bundle exec fastlane bump_build` — +1 sur le build number
+
+Avant un build, vérifier que `.env` (Supabase) est à jour : les variables `EXPO_PUBLIC_*` sont lues au moment du bundle JS Xcode.
 
 ---
 

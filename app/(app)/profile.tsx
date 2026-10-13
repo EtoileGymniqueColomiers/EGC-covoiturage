@@ -138,7 +138,7 @@ export default function ProfileScreen() {
   if (!profile) return null
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} testID="screen-profile" accessibilityLabel="screen-profile">
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}

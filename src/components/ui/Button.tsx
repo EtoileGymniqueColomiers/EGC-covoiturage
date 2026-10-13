@@ -22,6 +22,7 @@ interface ButtonProps {
   style?: ViewStyle
   textStyle?: TextStyle
   fullWidth?: boolean
+  testID?: string
 }
 
 export function Button({
@@ -34,6 +35,7 @@ export function Button({
   style,
   textStyle,
   fullWidth = false,
+  testID,
 }: ButtonProps) {
   const isDisabled = disabled || loading
 
@@ -42,6 +44,8 @@ export function Button({
       onPress={onPress}
       disabled={isDisabled}
       activeOpacity={0.8}
+      testID={testID}
+      accessibilityLabel={testID ?? label}
       style={[
         styles.base,
         styles[variant],

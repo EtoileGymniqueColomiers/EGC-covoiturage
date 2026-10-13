@@ -55,7 +55,10 @@ export default function NotificationsScreen() {
         .eq('user_id', profile?.id ?? '')
         .is('read_at', null)
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      queryClient.setQueryData(['notifications', 'unread-count', profile?.id], 0)
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
   })
 
   // Marquer toutes comme lues à l'ouverture

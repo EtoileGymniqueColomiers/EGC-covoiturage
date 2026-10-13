@@ -78,7 +78,7 @@ export default function HomeScreen() {
   const nextSession = formatNextSession()
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} testID="screen-home" accessibilityLabel="screen-home">
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scroll}

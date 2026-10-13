@@ -1,0 +1,39 @@
+# Frozen-string-literal: true
+
+# Devices — App Store Connect 6.7" slot expects 1284×2778 (iPhone 14 Pro Max).
+# iPhone 16 Pro Max produces 1320×2868 which ASC rejects for this display size.
+devices([
+  "iPhone 14 Pro Max"
+])
+
+languages([
+  "fr-FR"
+])
+
+scheme("EGCCovoiturage")
+workspace("./EGCCovoiturage.xcworkspace")
+
+# Release embeds JS (no Metro "Bundling XX%" overlay on splash / screenshots)
+configuration("Release")
+
+# Simulator builds don't need Distribution profiles
+xcargs("CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO")
+
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+override_status_bar(true)
+stop_after_first_error(true)
+concurrent_simulators(false)
+
+# Credentials from ios/fastlane/.env — SnapshotHelper injects them as UserDefaults launch args
+email = ENV["SNAPSHOT_EMAIL"].to_s
+password = ENV["SNAPSHOT_PASSWORD"].to_s
+
+if email.empty? || password.empty?
+  UI.user_error!("Set SNAPSHOT_EMAIL and SNAPSHOT_PASSWORD in ios/fastlane/.env")
+end
+
+# Avoid passwords with spaces; they break launch-arg tokenization
+launch_arguments([
+  "-SNAPSHOT_EMAIL #{email} -SNAPSHOT_PASSWORD #{password}"
+])

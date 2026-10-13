@@ -120,7 +120,7 @@ export default function LoginScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} testID="screen-login" accessibilityLabel="screen-login">
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.flex}
@@ -146,6 +146,8 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={[styles.modeTab, mode === 'licencie' && styles.modeTabActive]}
               onPress={() => { setMode('licencie'); setErrors({}); setLoginError(null) }}
+              testID="login-mode-licencie"
+              accessibilityLabel="login-mode-licencie"
             >
               <Ionicons
                 name="card-outline"
@@ -160,6 +162,8 @@ export default function LoginScreen() {
             <TouchableOpacity
               style={[styles.modeTab, mode === 'parent' && styles.modeTabActive]}
               onPress={() => { setMode('parent'); setErrors({}); setLoginError(null) }}
+              testID="login-mode-parent"
+              accessibilityLabel="login-mode-parent"
             >
               <Ionicons
                 name="people-outline"
@@ -207,6 +211,8 @@ export default function LoginScreen() {
                   keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
+                  testID="login-email"
+                  accessibilityLabel="login-email"
                 />
                 <Input
                   label="Mot de passe"
@@ -216,6 +222,8 @@ export default function LoginScreen() {
                   error={errors.password}
                   icon="lock-closed-outline"
                   isPassword
+                  testID="login-password"
+                  accessibilityLabel="login-password"
                 />
               </>
             )}
@@ -233,6 +241,7 @@ export default function LoginScreen() {
               loading={loading}
               fullWidth
               style={styles.loginButton}
+              testID="login-submit"
             />
 
             {mode === 'parent' && (

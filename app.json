@@ -1,11 +1,14 @@
 {
   "expo": {
-    "name": "EGC-covoiturage",
+    "name": "EGC Covoiturage",
     "slug": "egc-covoiturage",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "egc",
     "userInterfaceStyle": "light",
     "splash": {
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#1A56DB"
     },
@@ -13,14 +16,25 @@
       "**/*"
     ],
     "ios": {
-        "jsEngine": "jsc",
+      "jsEngine": "jsc",
       "supportsTablet": false,
       "bundleIdentifier": "fr.egc.covoiturage",
       "buildNumber": "1",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Utilisé pour afficher les trajets proches de vous.",
         "NSCameraUsageDescription": "Utilisé pour votre photo de profil.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIApplicationSceneManifest": {
+          "UIApplicationSupportsMultipleScenes": false,
+          "UISceneConfigurations": {
+            "UIWindowSceneSessionRoleApplication": [
+              {
+                "UISceneConfigurationName": "Default Configuration",
+                "UISceneDelegateClassName": "$(PRODUCT_MODULE_NAME).SceneDelegate"
+              }
+            ]
+          }
+        }
       }
     },
     "android": {
@@ -44,7 +58,23 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-notifications"
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#1A56DB"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "15.1"
+          }
+        }
+      ],
+      "./plugins/withIosDeploymentTarget.js",
+      "./plugins/withUiSceneLifecycle.js"
     ],
     "experiments": {
       "typedRoutes": true

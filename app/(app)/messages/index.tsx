@@ -28,7 +28,7 @@ export default function MessagesScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} testID="screen-messages" accessibilityLabel="screen-messages">
       <View style={styles.header}>
         <Text style={styles.title}>Messages</Text>
       </View>

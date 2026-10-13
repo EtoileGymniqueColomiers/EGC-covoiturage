@@ -35,7 +35,7 @@ export default function TripsScreen() {
   })
 
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={styles.safe} testID="screen-trips" accessibilityLabel="screen-trips">
       {/* En-tête */}
       <View style={styles.header}>
         <Text style={styles.title}>Trajets disponibles</Text>

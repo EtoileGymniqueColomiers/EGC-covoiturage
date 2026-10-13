@@ -1,0 +1,184 @@
+# Frozen-string-literal: true
+
+default_platform(:ios)
+
+PLATFORM_ROOT = File.expand_path("..", __dir__)
+XCODEPROJ = File.join(PLATFORM_ROOT, "EGCCovoiturage.xcodeproj")
+WORKSPACE = "EGCCovoiturage.xcworkspace"
+SCHEME = "EGCCovoiturage"
+BUNDLE_ID = "fr.egc.covoiturage"
+
+def resolve_api_key_path
+  key_path = ENV["APP_STORE_CONNECT_KEY_PATH"].to_s
+  return nil if key_path.empty?
+
+  candidates = [
+    File.expand_path(key_path, PLATFORM_ROOT),
+    File.expand_path(key_path, __dir__),
+    File.expand_path(key_path)
+  ]
+  candidates.find { |p| File.exist?(p) }
+end
+
+def api_key
+  key_id = ENV["APP_STORE_CONNECT_KEY_ID"].to_s
+  issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s
+  key_filepath = resolve_api_key_path
+
+  return nil if key_id.empty? || issuer_id.empty? || key_filepath.nil?
+
+  app_store_connect_api_key(
+    key_id: key_id,
+    issuer_id: issuer_id,
+    key_filepath: key_filepath,
+    duration: 1200,
+    in_house: false
+  )
+end
+
+def ensure_signing_ready!
+  UI.user_error!("Set FASTLANE_TEAM_ID in ios/fastlane/.env") if ENV["FASTLANE_TEAM_ID"].to_s.empty?
+
+  key_id = ENV["APP_STORE_CONNECT_KEY_ID"].to_s
+  issuer_id = ENV["APP_STORE_CONNECT_ISSUER_ID"].to_s
+  key_filepath = resolve_api_key_path
+
+  UI.user_error!("Set APP_STORE_CONNECT_KEY_ID in ios/fastlane/.env") if key_id.empty?
+  UI.user_error!("Set APP_STORE_CONNECT_ISSUER_ID in ios/fastlane/.env") if issuer_id.empty?
+  UI.user_error!(
+    "App Store Connect .p8 not found. Set APP_STORE_CONNECT_KEY_PATH (e.g. secrets/AuthKey_XXX.p8 under ios/)"
+  ) if key_filepath.nil?
+end
+
+# Fetch/create Distribution cert + App Store profile via ASC API (no Xcode account).
+def setup_app_store_signing!(key)
+  get_certificates(api_key: key)
+
+  profile_path = get_provisioning_profile(
+    api_key: key,
+    app_identifier: BUNDLE_ID,
+    filename: "#{BUNDLE_ID}.mobileprovision",
+    output_path: File.join(PLATFORM_ROOT, "build", "profiles"),
+    force: true
+  )
+
+  profile_name = ENV["SIGH_NAME"] || lane_context[SharedValues::SIGH_NAME]
+  UI.user_error!("Could not resolve provisioning profile name") if profile_name.to_s.empty?
+
+  update_code_signing_settings(
+    path: XCODEPROJ,
+    use_automatic_signing: false,
+    team_id: ENV["FASTLANE_TEAM_ID"],
+    bundle_identifier: BUNDLE_ID,
+    code_sign_identity: "Apple Distribution",
+    profile_name: profile_name,
+    targets: [SCHEME]
+  )
+
+  UI.success("Signing ready: #{profile_name} (#{profile_path})")
+  profile_name
+end
+
+platform :ios do
+  desc "Install CocoaPods"
+  lane :pods do
+    cocoapods(
+      podfile: File.join(PLATFORM_ROOT, "Podfile"),
+      try_repo_update_on_error: true
+    )
+  end
+
+  desc "Bump iOS build number (CFBundleVersion)"
+  lane :bump_build do
+    increment_build_number(xcodeproj: XCODEPROJ)
+  end
+
+  desc "Build App Store IPA (signed via ASC API key — no Xcode GUI)"
+  lane :build do
+    ensure_signing_ready!
+    key = api_key
+    FileUtils.mkdir_p(File.join(PLATFORM_ROOT, "build", "profiles"))
+
+    profile_name = setup_app_store_signing!(key)
+
+    build_app(
+      workspace: File.join(PLATFORM_ROOT, WORKSPACE),
+      scheme: SCHEME,
+      configuration: "Release",
+      clean: true,
+      export_method: "app-store",
+      output_directory: File.join(PLATFORM_ROOT, "build"),
+      output_name: "EGCCovoiturage.ipa",
+      xcargs: "DEVELOPMENT_TEAM=#{ENV['FASTLANE_TEAM_ID']}",
+      export_options: {
+        method: "app-store",
+        signingStyle: "manual",
+        teamID: ENV["FASTLANE_TEAM_ID"],
+        provisioningProfiles: {
+          BUNDLE_ID => profile_name
+        }
+      }
+    )
+  end
+
+  desc "Build + upload to TestFlight"
+  lane :beta do
+    ensure_signing_ready!
+    key = api_key
+
+    # Uncomment if you want auto-increment every upload:
+    # bump_build
+
+    build
+
+    upload_to_testflight(
+      api_key: key,
+      app_identifier: BUNDLE_ID,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      changelog: ENV["TESTFLIGHT_CHANGELOG"] || "Build TestFlight"
+    )
+  end
+
+  desc "Upload an existing IPA to TestFlight"
+  lane :upload do |options|
+    ensure_signing_ready!
+    ipa = options[:ipa] || File.join(PLATFORM_ROOT, "build", "EGCCovoiturage.ipa")
+    UI.user_error!("IPA not found: #{ipa}") unless File.exist?(ipa)
+
+    upload_to_testflight(
+      api_key: api_key,
+      app_identifier: BUNDLE_ID,
+      ipa: ipa,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false
+    )
+  end
+
+  desc "Capture App Store screenshots (demo login via SNAPSHOT_* env)"
+  lane :screenshots do
+    UI.user_error!("Set SNAPSHOT_EMAIL in ios/fastlane/.env") if ENV["SNAPSHOT_EMAIL"].to_s.empty?
+    UI.user_error!("Set SNAPSHOT_PASSWORD in ios/fastlane/.env") if ENV["SNAPSHOT_PASSWORD"].to_s.empty?
+
+    capture_screenshots(
+      workspace: File.join(PLATFORM_ROOT, WORKSPACE),
+      scheme: SCHEME,
+      stop_after_first_error: true
+    )
+  end
+
+  desc "Upload screenshots from fastlane/screenshots to App Store Connect"
+  lane :upload_screenshots do
+    ensure_signing_ready!
+
+    upload_to_app_store(
+      api_key: api_key,
+      app_identifier: BUNDLE_ID,
+      skip_binary_upload: true,
+      skip_metadata: true,
+      overwrite_screenshots: true,
+      force: true,
+      screenshots_path: File.join(__dir__, "screenshots")
+    )
+  end
+end
